@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mlpox"
+version = "0.1.0"
+description = "Deep Multilayer Perceptrons in Equinox"
+authors = [{name = "Dimitrije Markovic <5038100+dimarkov@users.noreply.github.com>"}]
+license = {text = "MIT"}
+dependencies = [
+    "jax>=0.4.38",
+    'equinox>=0.11.11',
+    'einops>=0.8.0'
+]
+readme = "README.md"
+requires-python = ">=3.11"
+
+[tool.black]
+line-length = 120
