@@ -4,6 +4,7 @@ import jax.numpy as jnp
 import jax.random as jr
 from jax import vmap
 from jaxtyping import PRNGKeyArray
+from einops import rearrange
 
 from equinox import Module, nn
 
@@ -62,11 +63,14 @@ class MixerBlock(Module):
         ]
     
     def __call__(self, x):
+        # x: (tokens embed_dim)
         y = vmap(self.norm1)(x)
-        y = jnp.swapaxes(y, 0, 1)
-        y = vmap(self.blocks[0])(y)
-        y = jnp.swapaxes(y, 0, 1)
+        # Token mixing: transpose for per-channel mixing
+        y = rearrange(y, 't e -> e t')  # (embed_dim tokens)
+        y = vmap(self.blocks[0])(y)     # Apply token mixing to each channel
+        y = rearrange(y, 'e t -> t e')  # (tokens embed_dim)
         x = x + y
+        # Channel mixing: apply directly to each token
         y = vmap(self.norm2)(x)
         return x + vmap(self.blocks[1])(y)
 

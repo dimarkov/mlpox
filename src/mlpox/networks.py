@@ -6,6 +6,7 @@ import jax.nn as jnn
 import jax.random as jr
 from jax import vmap
 from jaxtyping import Array, PRNGKeyArray
+from einops import rearrange
 
 from equinox import nn, Module
 
@@ -142,9 +143,10 @@ class MlpMixer(Module):
         A JAX array with shape `(out_size,)`.
         """
         if key is not None:
-            x = self.augmentation(key, x).transpose(2, 0, 1)
+            x = self.augmentation(key, x)
+            x = rearrange(x, 'h w c -> c h w')
         else:
-            x = x.transpose(2, 0, 1)
+            x = rearrange(x, 'h w c -> c h w')
         
         x = self.patch_embed(x)
         # x shape is (h w) embed_dim
@@ -229,12 +231,13 @@ class DeepMlp(Module):
         A JAX array with shape `(num_classes,)`.
         """
         if self.inference:
-            x = x.reshape(-1)
+            x = rearrange(x, '... -> (-1)')
         else:
             if key is not None:
-                x = self.augmentation(key, x).reshape(-1)
+                x = self.augmentation(key, x)
+                x = rearrange(x, '... -> (-1)')
             else:
-                x = x.reshape(-1)
+                x = rearrange(x, '... -> (-1)')
         
         x = self.linear_embed(x)
         # x shape is embed_dim
