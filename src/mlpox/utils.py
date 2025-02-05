@@ -24,8 +24,6 @@ class Patch(Module):
         self,
         img_size: Union[int, Tuple[int]] = 224,
         patch_size: Union[int, Tuple[int]] = 16,
-        in_chans: int = 3,
-        embed_dim: int = 768,
         flatten: bool = True,
     ):
         """
@@ -82,7 +80,7 @@ class PatchConvEmbed(Patch):
 
         _, key = jrandom.split(key)
         self.proj = nn.Conv2d(
-            in_chans, embed_dim, kernel_size=patch_size, stride=patch_size, key=key
+            in_chans, embed_dim, kernel_size=self.patch_size, stride=self.patch_size, key=key
         )
 
     def __call__(
@@ -93,11 +91,6 @@ class PatchConvEmbed(Patch):
         - `x`: The input. Should be a JAX array of shape`(in_chans, img_size[0], img_size[1])`.
         - `key`: Ignored
         """
-        C, H, W = x.shape
-        if H != self.img_size[0] or W != self.img_size[1]:
-            raise ValueError(
-                f"Input image height ({H},{W}) doesn't match model ({self.img_size})."
-            )
 
         # Apply convolution
         x = self.proj(x)  # (embed_dim, H', W')
@@ -120,7 +113,6 @@ class PatchLinearEmbed(Patch):
             patch_size: Union[int, Tuple[int]] = 16,
             in_chans: int = 3,
             embed_dim: int = 768,
-            flatten: bool = True,
             *,
             key: PRNGKeyArray
         ):
@@ -135,7 +127,7 @@ class PatchLinearEmbed(Patch):
         - `key`: A `jax.random.PRNGKey` used to provide randomness for parameter
             initialisation. (Keyword only argument.)
         """
-        super().__init__(img_size, patch_size, in_chans, embed_dim, flatten)
+        super().__init__(img_size, patch_size, in_chans, embed_dim, True)
         _, key = jrandom.split(key)
         
         in_features = in_chans * patch_size * patch_size
@@ -151,7 +143,7 @@ class PatchLinearEmbed(Patch):
         
         A JAX array of shape `(num_patches, embed_dim)`.
         """
-        # Rearrange input into patches and flatten if needed
+        # Rearrange input into patches
         x = rearrange(
             x, 
             'c (h p1) (w p2) -> (h w) (p1 p2 c)', 
