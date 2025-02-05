@@ -1,6 +1,8 @@
 import jax
 import jax.numpy as jnp
 import jax.random as jr
+from jax import grad
+import numpy as np
 import pytest
 
 from mlpox.utils import (

@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 import jax.random as jr
 import jax.nn as jnn
+from jax import grad, vmap
 import pytest
 
 from mlpox.networks import (
