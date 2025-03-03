@@ -1,14 +1,15 @@
-import jax
+import equinox as eqx
 import jax.numpy as jnp
 import jax.random as jr
 import jax.nn as jnn
-from jax import grad, vmap
+from jax import grad, vmap, tree_util as jtu
 import pytest
 
 from mlpox.networks import (
     MLP,
     MlpMixer,
-    DeepMlp
+    DeepMlp,
+    MlpType
 )
 
 @pytest.fixture
@@ -32,7 +33,7 @@ def test_mlp_mixer(key):
     mixer = MlpMixer(
         img_size=32,
         patch_size=4,
-        in_channels=3,
+        in_chans=3,
         embed_dim=256,
         tokens_hidden_dim=128,
         num_classes=10,
@@ -46,11 +47,11 @@ def test_mlp_mixer(key):
 def test_deep_mlp_bottleneck(key):
     mlp = DeepMlp(
         img_size=32,
-        in_channels=3,
+        in_chans=3,
         embed_dim=256,
         num_classes=10,
         num_blocks=2,
-        type="bottleneck",
+        mlp_type="bottleneck",
         key=key
     )
     x = jnp.ones((32, 32, 3))
@@ -60,11 +61,39 @@ def test_deep_mlp_bottleneck(key):
 def test_deep_mlp_standard(key):
     mlp = DeepMlp(
         img_size=32,
-        in_channels=3,
+        in_chans=3,
         embed_dim=256,
         num_classes=10,
         num_blocks=2,
-        type="standard",
+        mlp_type="standard",
+        key=key
+    )
+    x = jnp.ones((32, 32, 3))
+    y = mlp(x, key=key)
+    assert y.shape == (10,)
+
+def test_mlp_type_enum():
+    # Test enum values
+    assert MlpType.BOTTLENECK.value == "bottleneck"
+    assert MlpType.STANDARD.value == "standard"
+    
+    # Test string conversion
+    assert MlpType("bottleneck") == MlpType.BOTTLENECK
+    assert MlpType("standard") == MlpType.STANDARD
+    
+    # Test invalid value
+    with pytest.raises(ValueError):
+        MlpType("invalid")
+
+def test_deep_mlp_with_enum_type(key):
+    # Test with enum value directly
+    mlp = DeepMlp(
+        img_size=32,
+        in_chans=3,
+        embed_dim=256,
+        num_classes=10,
+        num_blocks=2,
+        mlp_type=MlpType.BOTTLENECK,
         key=key
     )
     x = jnp.ones((32, 32, 3))
@@ -72,14 +101,14 @@ def test_deep_mlp_standard(key):
     assert y.shape == (10,)
 
 def test_deep_mlp_invalid_type(key):
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(ValueError):
         DeepMlp(
             img_size=32,
-            in_channels=3,
+            in_chans=3,
             embed_dim=256,
             num_classes=10,
             num_blocks=2,
-            type="invalid",
+            mlp_type="invalid",
             key=key
         )
 
@@ -91,48 +120,51 @@ def test_mlp_numerical_stability(key):
     assert not jnp.any(jnp.isinf(y))
 
 def test_mlp_mixer_gradients(key):
-    mixer = MlpMixer(img_size=16, patch_size=4, in_channels=1, num_blocks=2, key=key)
+    mixer = MlpMixer(img_size=16, patch_size=4, in_chans=1, num_blocks=2, key=key)
     
-    def loss_fn(params, x):
-        mixer_copy = mixer.replace(**params)
-        return jnp.mean(mixer_copy(x) ** 2)
+    def loss_fn(model, x):
+        return jnp.mean(model(x) ** 2)
     
     x = jnp.ones((16, 16, 1))
-    grads = grad(loss_fn)(mixer.filter(lambda p: True), x)
+    grads = eqx.filter_grad(loss_fn)(mixer, x)
     
     # Check if gradients exist and are finite
-    assert all(jnp.all(jnp.isfinite(g)) for g in jax.tree_util.tree_leaves(grads))
+    assert all(jnp.all(jnp.isfinite(g)) for g in jtu.tree_leaves(grads))
 
 def test_deep_mlp_parameter_count(key):
     mlp = DeepMlp(
         img_size=16,
-        in_channels=1,
+        in_chans=1,
         embed_dim=32,
         num_blocks=2,
-        type="bottleneck",
+        mlp_type="bottleneck",
         key=key
     )
     
     # Count parameters
-    param_count = sum(p.size for p in jax.tree_util.tree_leaves(mlp.filter(lambda p: True)))
+    params, static = eqx.partition(mlp, eqx.is_array)
+    param_count = sum(p.size for p in jtu.tree_leaves(params))
     
     # Calculate expected parameter count
     expected_count = (
-        16 * 16 * 32 +  # linear_embed
-        2 * (32 * 128 + 128 * 32) +  # bottleneck blocks
-        32 * 10  # final classifier
+        16 * 16 * 32 + 32 + # linear_embed
+        2 * (32 * 129 + 128 * 33) +  # bottleneck blocks
+        33 * 10  # final classifier
     )
     assert param_count == expected_count
 
 def test_networks_batch_processing(key):
     # Test MLP with batch
+    batch_size = 5
+    key = jr.PRNGKey(0)
+    keys = jr.split(key, batch_size)
     mlp = MLP(784, 10, 256, 2, dropout_rate=0.1, key=key)
-    x_batch = jnp.ones((5, 784))
-    y_batch = vmap(mlp, in_axes=(0, None))(x_batch, key)
+    x_batch = jnp.ones((batch_size, 784))
+    y_batch = vmap(mlp)(x_batch, key=keys)
     assert y_batch.shape == (5, 10)
     
     # Test MlpMixer with batch
-    mixer = MlpMixer(img_size=32, patch_size=4, in_channels=3, num_blocks=2, key=key)
+    mixer = MlpMixer(img_size=32, patch_size=4, in_chans=3, num_blocks=2, key=key)
     x_batch = jnp.ones((5, 32, 32, 3))
-    y_batch = vmap(mixer, in_axes=(0, None))(x_batch, key)
+    y_batch = vmap(mixer)(x_batch, key=keys)
     assert y_batch.shape == (5, 10)

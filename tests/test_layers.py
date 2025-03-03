@@ -1,7 +1,8 @@
-import jax
+import equinox as eqx
 import jax.numpy as jnp
 import jax.random as jr
 import jax.nn as jnn
+import jax.tree_util as jtu
 from jax import grad, vmap
 import pytest
 import numpy as np
@@ -74,15 +75,14 @@ def test_mixer_block_edge_cases(key):
 def test_standard_mlp_block_gradients(key):
     block = StandardMlpBlock(3, 2, jnn.relu, key=key)
     
-    def loss_fn(params, x):
-        block_copy = block.replace(**params)
-        return jnp.mean(block_copy(x) ** 2)
+    def loss_fn(model, x):
+        return jnp.mean(model(x) ** 2)
     
     x = jnp.array([1.0, 2.0, 3.0])
-    grads = grad(loss_fn)(block.filter(lambda p: True), x)
+    grads = eqx.filter_grad(loss_fn)(block, x)
     
     # Check if gradients exist for all parameters
-    assert all(g is not None for g in jax.tree_util.tree_leaves(grads))
+    assert all(g is not None for g in jtu.tree_leaves(grads))
 
 def test_bottleneck_mlp_block_parameter_shapes(key):
     in_features = 10

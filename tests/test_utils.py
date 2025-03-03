@@ -1,7 +1,7 @@
-import jax
+import equinox as eqx
 import jax.numpy as jnp
 import jax.random as jr
-from jax import grad
+import jax.tree_util as jtu
 import numpy as np
 import pytest
 
@@ -16,9 +16,11 @@ def key():
     return jr.PRNGKey(0)
 
 def test_patch():
-    patch = Patch(img_size=32, patch_size=4)
+    patch = Patch(img_size=32, patch_size=4, in_chans=3, embed_dim=128)
     assert patch.grid_size == (8, 8)
     assert patch.num_patches == 64
+    assert patch.in_chans == 3
+    assert patch.embed_dim == 128
 
 def test_patch_conv_embed(key):
     embed = PatchConvEmbed(
@@ -45,8 +47,28 @@ def test_patch_linear_embed(key):
     assert y.shape == (64, 256)  # (num_patches, embed_dim)
 
 def test_patch_size_validation():
+    # Test base Patch class validation
+    with pytest.raises(ValueError):
+        Patch(
+            img_size=32,
+            patch_size=5,  # Not divisible into image size
+            in_chans=3,
+            embed_dim=256
+        )
+    
+    # Test PatchConvEmbed validation (inherited from Patch)
     with pytest.raises(ValueError):
         PatchConvEmbed(
+            img_size=32,
+            patch_size=5,  # Not divisible into image size
+            in_chans=3,
+            embed_dim=256,
+            key=jr.PRNGKey(0)
+        )
+    
+    # Test PatchLinearEmbed validation (inherited from Patch)
+    with pytest.raises(ValueError):
+        PatchLinearEmbed(
             img_size=32,
             patch_size=5,  # Not divisible into image size
             in_chans=3,
@@ -76,15 +98,14 @@ def test_patch_edge_cases(key):
 def test_patch_gradients(key):
     embed = PatchConvEmbed(img_size=8, patch_size=2, in_chans=1, embed_dim=4, key=key)
     
-    def loss_fn(params, x):
-        embed_copy = embed.replace(**params)
-        return jnp.mean(embed_copy(x) ** 2)
+    def loss_fn(model, x):
+        return jnp.mean(model(x) ** 2)
     
     x = jnp.ones((1, 8, 8))
-    grads = grad(loss_fn)(embed.filter(lambda p: True), x)
+    grads = eqx.filter_grad(loss_fn)(embed, x)
     
     # Check if gradients exist and are finite
-    assert all(jnp.all(jnp.isfinite(g)) for g in jax.tree_util.tree_leaves(grads))
+    assert all(jnp.all(jnp.isfinite(g)) for g in jtu.tree_flatten(grads)[0])
 
 def test_patch_parameter_shapes(key):
     in_chans = 3
@@ -101,7 +122,7 @@ def test_patch_parameter_shapes(key):
     
     # Test conv parameters
     assert conv_embed.proj.weight.shape == (embed_dim, in_chans, patch_size, patch_size)
-    assert conv_embed.proj.bias.shape == (embed_dim,)
+    assert conv_embed.proj.bias.shape == (embed_dim, 1, 1)
     
     linear_embed = PatchLinearEmbed(
         img_size=16,
