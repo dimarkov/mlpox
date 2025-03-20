@@ -87,7 +87,6 @@ class MlpMixer(Module):
     norm: nn.LayerNorm
     patch_embed: Module
     fc: nn.Linear
-    augmentation: Callable
 
     def __init__(
             self,
@@ -101,7 +100,6 @@ class MlpMixer(Module):
             num_blocks: int = 8,
             activation: Callable[[Array], Array] = jnn.gelu,
             patch_embed: Callable = PatchConvEmbed,
-            augmentation: Optional[Callable[[PRNGKeyArray, Array], Array]] = None,
             *,
             key: PRNGKeyArray
         ):
@@ -117,14 +115,11 @@ class MlpMixer(Module):
         - `num_blocks`: Number of mixer blocks to use. Defaults to `8`.
         - `activation`: Activation function to use. Defaults to `gelu`.
         - `patch_embed`: Patch embedding function to use. Defaults to `PatchConvEmbed`.
-        - `augmentation`: Optional function for data augmentation. Takes a PRNGKey and input array.
         - `key`: A `jax.random.PRNGKey` used for parameter initialization.
         """
         super().__init__()
         embed_hidden_dim = hidden_dim_ratio * tokens_hidden_dim
         keys = jr.split(key, num_blocks + 2)
-
-        self.augmentation = augmentation if augmentation is not None else lambda key, x: x
 
         self.patch_embed = patch_embed(
             img_size=img_size,
@@ -158,17 +153,14 @@ class MlpMixer(Module):
         """**Arguments:**
 
         - `x`: A JAX array with shape `(height, width, channels)`.
-        - `key`: A `jax.random.PRNGKey` used for data augmentation if provided. (Keyword only argument.)
+        - `key`: A `jax.random.PRNGKey` not used; present for syntax consistency. (Keyword only argument.)
 
         **Returns:**
 
         A JAX array with shape `(num_classes,)`.
         """
-        if key is not None:
-            x = self.augmentation(key, x)
-            x = rearrange(x, 'h w c -> c h w')
-        else:
-            x = rearrange(x, 'h w c -> c h w')
+
+        x = rearrange(x, 'h w c -> c h w')
         
         x = self.patch_embed(x)
         # x shape is (h w) embed_dim
@@ -185,8 +177,6 @@ class DeepMlp(Module):
     layers: Union[Sequence[BottleneckMlpBlock],Sequence[StandardMlpBlock]]
     linear_embed: nn.Linear
     fc: nn.Linear
-    augmentation: Callable
-    inference: bool
 
     def __init__(
             self,
@@ -197,9 +187,7 @@ class DeepMlp(Module):
             num_classes: int = 10,
             num_blocks: int = 8,
             activation: Callable[[Array], Array] = jnn.gelu,
-            augmentation: Optional[Callable[[PRNGKeyArray, Array], Array]] = None,
             mlp_type: Union[MlpType, str] = MlpType.BOTTLENECK,
-            inference: bool = False,
             *,
             key: PRNGKeyArray
         ):
@@ -212,17 +200,11 @@ class DeepMlp(Module):
         - `num_classes`: Number of output classes. Defaults to `10`.
         - `num_blocks`: Number of MLP blocks to use. Defaults to `8`.
         - `activation`: Activation function to use. Defaults to `gelu`.
-        - `augmentation`: Optional function for data augmentation. Takes a PRNGKey and input array.
         - `mlp_type`: Type of MLP architecture to use. Either MlpType.BOTTLENECK or MlpType.STANDARD.
-        - `inference`: Whether to run in inference mode (affects augmentation). Defaults to `False`.
         - `key`: A `jax.random.PRNGKey` used for parameter initialization.
         """
         super().__init__()
         keys = jr.split(key, num_blocks + 2)
-
-        self.inference = inference
-
-        self.augmentation = augmentation if augmentation is not None else lambda key, x: x
         
         img_size = (img_size, img_size) if isinstance(img_size, int) else img_size
         in_features = prod(img_size) * in_chans
@@ -255,8 +237,6 @@ class DeepMlp(Module):
                 ) 
                 for i in range(num_blocks)
             ]
-        else:
-            raise NotImplementedError(f"MLP type {mlp_type} not implemented")
 
         # Classifier head
         self.fc = nn.Linear(embed_dim, num_classes, key=keys[-2])
@@ -273,15 +253,7 @@ class DeepMlp(Module):
 
         A JAX array with shape `(num_classes,)`.
         """
-        if self.inference:
-            x = rearrange(x, 'h w c -> (h w c)')
-        else:
-            if key is not None:
-                x = self.augmentation(key, x)
-                x = rearrange(x, 'h w c -> (h w c)')
-            else:
-                x = rearrange(x, 'h w c -> (h w c)')
-        
+        x = rearrange(x, 'h w c -> (h w c)')
         x = self.linear_embed(x)
         # x shape is embed_dim
         for layer in self.layers:
