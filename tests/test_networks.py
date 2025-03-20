@@ -2,7 +2,7 @@ import equinox as eqx
 import jax.numpy as jnp
 import jax.random as jr
 import jax.nn as jnn
-from jax import grad, vmap, tree_util as jtu
+from jax import vmap, tree_util as jtu
 import pytest
 
 from mlpox.networks import (
@@ -131,6 +131,24 @@ def test_mlp_mixer_gradients(key):
     # Check if gradients exist and are finite
     assert all(jnp.all(jnp.isfinite(g)) for g in jtu.tree_leaves(grads))
 
+def test_deep_mlp_gradients(key):
+    dmlp = DeepMlp(img_size=16, in_chans=1, num_blocks=2, mlp_type="standard", key=key)
+    
+    def loss_fn(model, x):
+        return jnp.mean(model(x) ** 2)
+    
+    x = jnp.ones((16, 16, 1))
+    grads = eqx.filter_grad(loss_fn)(dmlp, x)
+    
+    # Check if gradients exist and are finite
+    assert all(jnp.all(jnp.isfinite(g)) for g in jtu.tree_leaves(grads))
+
+    dmlp = DeepMlp(img_size=16, in_chans=1, num_blocks=2, mlp_type="bottleneck", key=key)
+    grads = eqx.filter_grad(loss_fn)(dmlp, x)
+    
+    # Check if gradients exist and are finite
+    assert all(jnp.all(jnp.isfinite(g)) for g in jtu.tree_leaves(grads))
+
 def test_deep_mlp_parameter_count(key):
     mlp = DeepMlp(
         img_size=16,
@@ -167,4 +185,14 @@ def test_networks_batch_processing(key):
     mixer = MlpMixer(img_size=32, patch_size=4, in_chans=3, num_blocks=2, key=key)
     x_batch = jnp.ones((5, 32, 32, 3))
     y_batch = vmap(mixer)(x_batch, key=keys)
+    assert y_batch.shape == (5, 10)
+
+    # Test Standard DeepMlp with batch
+    dmlp = DeepMlp(img_size=32, in_chans=3, num_blocks=2, mlp_type="standard", key=key)
+    y_batch = vmap(dmlp)(x_batch, key=keys)
+    assert y_batch.shape == (5, 10)
+
+    # Test Bottleneck DeepMlp with batch
+    dmlp = DeepMlp(img_size=32, in_chans=3, num_blocks=2, mlp_type="bottleneck", key=key)
+    y_batch = vmap(dmlp)(x_batch, key=keys)
     assert y_batch.shape == (5, 10)
