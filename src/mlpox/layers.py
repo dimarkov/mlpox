@@ -81,8 +81,8 @@ class MixerBlock(Module):
         - `key`: A `jax.random.PRNGKey` used for parameter initialization.
         """
         super().__init__()
-        self.norm1 = nn.LayerNorm(embed_dim, eps=1e-6)
-        self.norm2 = nn.LayerNorm(embed_dim, eps=1e-6, use_weight=False, use_bias=False)
+        self.norm1 = nn.LayerNorm(embed_dim, eps=1e-5)
+        self.norm2 = nn.LayerNorm(embed_dim, eps=1e-5)
 
         keys = jr.split(key, 2)
         self.blocks = [
@@ -137,7 +137,7 @@ class StandardMlpBlock(Module):
         super().__init__()
         self.activation = activation
         self.linear = nn.Linear(in_features=in_features, out_features=out_features, key=key)
-        self.norm = nn.LayerNorm(in_features, use_weight=False, use_bias=False)
+        self.norm = nn.LayerNorm(in_features, eps=1e-5)
 
     def __call__(self, x: Array) -> Array:
         """
@@ -150,14 +150,16 @@ class StandardMlpBlock(Module):
         Output array with shape `(out_features,)`.
         """
         x = self.norm(x)
-        x = self.linear(x)
-        return self.activation(x)
+        x = self.activation(x)
+        return self.linear(x)
 
 
 class BottleneckMlpBlock(Module):
     """Bottleneck MLP block with residual connection."""
-    block: StandardMlpBlock
-    linear: nn.Linear
+    linear1: nn.Linear
+    linear2: nn.Linear
+    norm: nn.LayerNorm
+    activation: Callable
 
     def __init__(
         self,
@@ -177,8 +179,10 @@ class BottleneckMlpBlock(Module):
         """
         super().__init__()
         keys = jr.split(key, 2)
-        self.block = StandardMlpBlock(in_features, ratio * in_features, activation, key=keys[0])
-        self.linear = nn.Linear(in_features=ratio * in_features, out_features=in_features, key=keys[1])
+        self.activation = activation
+        self.linear1 = nn.Linear(in_features=in_features, out_features=ratio * in_features, key=keys[0])
+        self.linear2 = nn.Linear(in_features=ratio * in_features, out_features=in_features, key=keys[1])
+        self.norm = nn.LayerNorm(in_features, eps=1e-5)
 
     def __call__(self, x: Array) -> Array:
         """
@@ -190,5 +194,7 @@ class BottleneckMlpBlock(Module):
 
         Output array with shape `(in_features,)` (same as input due to residual connection).
         """
-        y = self.block(x)
-        return x + self.linear(y)
+        x = self.norm(x)
+        y = self.linear1(x)
+        y = self.activation(y)
+        return x + self.linear2(y)

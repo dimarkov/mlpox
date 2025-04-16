@@ -142,7 +142,7 @@ class MlpMixer(Module):
             for i in range(num_blocks)
         ]
 
-        self.norm = nn.LayerNorm(embed_dim, eps=1e-6, use_bias=False, use_weight=False)
+        self.norm = nn.LayerNorm(embed_dim, eps=1e-5, use_bias=False)
 
         # Classifier head
         self.fc = nn.Linear(embed_dim, num_classes, key=keys[-1])
@@ -227,6 +227,10 @@ class DeepMlp(Module):
                 ) 
                 for i in range(num_blocks)
             ]
+
+            # Classifier head
+            self.fc = nn.Linear(embed_dim, num_classes, key=keys[-2])
+
         elif mlp_type == MlpType.STANDARD:
             self.layers = [
                 StandardMlpBlock(
@@ -238,8 +242,14 @@ class DeepMlp(Module):
                 for i in range(num_blocks)
             ]
 
-        # Classifier head
-        self.fc = nn.Linear(embed_dim, num_classes, key=keys[-2])
+            # Classifier head
+            self.fc = nn.Sequential(
+                [   
+                    nn.LayerNorm(embed_dim, eps=1e-5),
+                    nn.Lambda(activation),
+                    nn.Linear(embed_dim, num_classes, key=keys[-2]),
+                ]
+            )
 
     def __call__(
         self, x: Array, *, key: Optional[PRNGKeyArray] = None
