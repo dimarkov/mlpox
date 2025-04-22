@@ -167,6 +167,7 @@ def test_deep_mlp_parameter_count(key):
     expected_count = (
         16 * 16 * 32 + 32 + # linear_embed
         2 * (32 * 129 + 128 * 33) +  # bottleneck blocks
+        2 * (2 * 32) +  # norm layer
         33 * 10  # final classifier
     )
     assert param_count == expected_count

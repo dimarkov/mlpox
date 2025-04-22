@@ -90,12 +90,12 @@ def test_bottleneck_mlp_block_parameter_shapes(key):
     block = BottleneckMlpBlock(in_features, jnn.relu, ratio=ratio, key=key)
     
     # Test internal block parameters
-    assert block.block.linear.weight.shape == (ratio * in_features, in_features)
-    assert block.block.linear.bias.shape == (ratio * in_features,)
+    assert block.linear1.weight.shape == (ratio * in_features, in_features)
+    assert block.linear1.bias.shape == (ratio * in_features,)
     
     # Test projection parameters
-    assert block.linear.weight.shape == (in_features, ratio * in_features)
-    assert block.linear.bias.shape == (in_features,)
+    assert block.linear2.weight.shape == (in_features, ratio * in_features)
+    assert block.linear2.bias.shape == (in_features,)
 
 def test_mixer_block_batch_processing(key):
     block = MixerBlock(4, 8, 16, 32, jnn.gelu, key=key)

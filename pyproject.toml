@@ -18,3 +18,8 @@ requires-python = ">=3.11"
 
 [tool.black]
 line-length = 120
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests that require external resources or network access"
+]
