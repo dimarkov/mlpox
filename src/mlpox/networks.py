@@ -163,7 +163,7 @@ class MlpMixer(Module):
         x = rearrange(x, 'h w c -> c h w')
         
         x = self.patch_embed(x)
-        # x shape is (h w) embed_dim
+        # x shape is (num_patches, embed_dim)
         for mixer in self.mixers:
             x = mixer(x)
 
