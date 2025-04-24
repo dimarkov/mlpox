@@ -14,6 +14,8 @@ from equinox import nn, Module
 from .layers import MixerBlock, StandardMlpBlock, BottleneckMlpBlock
 from .utils import PatchConvEmbed
 
+gelu = lambda x: jnn.gelu(x, approximate=False)
+
 
 class MlpType(Enum):
     """Types of MLP architectures available in DeepMlp."""
@@ -98,7 +100,7 @@ class MlpMixer(Module):
             hidden_dim_ratio: int = 4,
             num_classes: int = 10,
             num_blocks: int = 8,
-            activation: Callable[[Array], Array] = jnn.gelu,
+            activation: Callable[[Array], Array] = gelu,
             patch_embed: Callable = PatchConvEmbed,
             *,
             key: PRNGKeyArray
@@ -186,7 +188,7 @@ class DeepMlp(Module):
             hidden_dim_ratio: int = 4,
             num_classes: int = 10,
             num_blocks: int = 8,
-            activation: Callable[[Array], Array] = jnn.gelu,
+            activation: Callable[[Array], Array] = gelu,
             mlp_type: Union[MlpType, str] = MlpType.BOTTLENECK,
             *,
             key: PRNGKeyArray
@@ -263,7 +265,7 @@ class DeepMlp(Module):
 
         A JAX array with shape `(num_classes,)`.
         """
-        x = rearrange(x, 'h w c -> (h w c)')
+        x = rearrange(x, 'h w c -> (c h w)')
         x = self.linear_embed(x)
         # x shape is embed_dim
         for layer in self.layers:

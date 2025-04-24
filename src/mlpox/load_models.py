@@ -276,7 +276,7 @@ def convert_params_from_torch(
         torch_param = remaining_params[param_path]
         
         # Print shape information for debugging
-        print(f"Converting {param_path}: PyTorch shape {torch_param.shape}, JAX shape {param.shape}")
+        # print(f"Converting {param_path}: PyTorch shape {torch_param.shape}, JAX shape {param.shape}")
         
         # Convert to JAX array
         torch_param_array = jnp.asarray(torch_param.numpy())
@@ -299,7 +299,10 @@ def convert_params_from_torch(
     return loaded_params
 
 
-def load_model(model_name: str, checkpoint_path: str = '.checkpoints/') -> eqx.Module:
+def load_model(
+    model_name: str,
+    checkpoint_path: str = '.checkpoints/',
+    ) -> eqx.Module:
     """
     Load a pre-trained PyTorch model into an Equinox model.
     

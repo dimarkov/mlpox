@@ -194,7 +194,7 @@ class BottleneckMlpBlock(Module):
 
         Output array with shape `(in_features,)` (same as input due to residual connection).
         """
-        x = self.norm(x)
-        y = self.linear1(x)
+        y = self.norm(x)
+        y = self.linear1(y)
         y = self.activation(y)
         return x + self.linear2(y)
